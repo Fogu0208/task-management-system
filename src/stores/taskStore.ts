@@ -96,11 +96,14 @@ export const useTaskStore = defineStore('task', () => {
     persistTasks()
   }
 
+  /**
+   * 添加新任务
+   * @param title 任务标题
+   * @param description 任务描述
+   * @param priority 任务优先级，默认为 'medium'
+   */
   const addTask = (title: string, description: string, priority: TaskPriority = 'medium') => {
-    const newId = tasks.value.length > 0 
-      ? Math.max(...tasks.value.map(t => t.id)) + 1
-      : 1
-
+    const newId = tasks.value.length > 0 ? Math.max(...tasks.value.map(t => t.id)) + 1 : 1
     const newTask: Task = {
       id: newId,
       title,
@@ -110,40 +113,51 @@ export const useTaskStore = defineStore('task', () => {
       createdAt: Date.now(),
       updatedAt: Date.now()
     }
-
-    tasks.value.push(newTask)
-    persistTasks()
-    return newTask
-  }
-
-  const updateTask = (id: number, payload: { title: string; description: string; priority: TaskPriority }) => {
-    const task = tasks.value.find(t => t.id === id)
-    if (!task) return
-
-    task.title = payload.title
-    task.description = payload.description
-    task.priority = payload.priority
-    task.updatedAt = Date.now()
+    tasks.value.unshift(newTask)
     persistTasks()
   }
 
+  /**
+   * 删除任务
+   * @param id 任务ID
+   */
   const removeTask = (id: number) => {
-    tasks.value = tasks.value.filter(t => t.id !== id)
-    persistTasks()
+    const index = tasks.value.findIndex(t => t.id === id)
+    if (index !== -1) {
+      tasks.value.splice(index, 1)
+      persistTasks()
+    }
   }
 
+  /**
+   * 更新任务信息
+   * @param id 任务ID
+   * @param updates 更新的内容（部分属性）
+   */
+  const updateTask = (id: number, updates: Partial<Omit<Task, 'id' | 'createdAt' | 'updatedAt'>>) => {
+    const task = tasks.value.find(t => t.id === id)
+    if (task) {
+      Object.assign(task, updates)
+      task.updatedAt = Date.now()
+      persistTasks()
+    }
+  }
+
+  /**
+   * 清除已完成的任务
+   * 用于批量删除状态为 'done' 的任务
+   */
   const clearCompletedTasks = () => {
     tasks.value = tasks.value.filter(t => t.status !== 'done')
     persistTasks()
   }
 
-  // 返回供组件使用
   return {
     tasks,
-    toggleTaskStatus,
     addTask,
-    updateTask,
     removeTask,
+    updateTask,
+    toggleTaskStatus,
     clearCompletedTasks
   }
 })

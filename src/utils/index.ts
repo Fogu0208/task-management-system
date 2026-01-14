@@ -1,3 +1,8 @@
+/**
+ * 格式化时间戳
+ * @param timestamp 时间戳（毫秒）
+ * @returns 格式化后的日期字符串 (YYYY-MM-DD HH:mm)
+ */
 export const formatTime = (timestamp?: number): string => {
   if (!timestamp) return ''
   const date = new Date(timestamp)

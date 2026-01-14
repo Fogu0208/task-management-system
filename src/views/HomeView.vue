@@ -176,22 +176,26 @@ import TaskForm from '../components/TaskForm.vue'
 import type { TaskStatus, TaskPriority, Task } from '../types'
 import { formatTime } from '../utils'
 
-// 使用 Pinia store
+// 使用 Pinia store 管理任务状态
 const taskStore = useTaskStore()
 
+// 对话框控制状态
 const showDialog = ref(false)
 const dialogMode = ref<'create' | 'edit'>('create')
 const editingTaskId = ref<number | null>(null)
 
+// 筛选条件类型定义
 type StatusFilter = 'all' | TaskStatus
 type PriorityFilter = 'all' | TaskPriority
 
+// 筛选状态
 const statusFilter = ref<StatusFilter>('all')
 const priorityFilter = ref<PriorityFilter>('all')
 const keyword = ref('')
 const debouncedKeyword = ref('')
 let keywordTimer: number | undefined
 
+// 监听搜索关键词变化，实现防抖
 watch(keyword, value => {
   if (keywordTimer !== undefined) {
     clearTimeout(keywordTimer)
@@ -201,135 +205,167 @@ watch(keyword, value => {
   }, 300)
 })
 
-const editingTask = computed<Task | null>(() => {
-  if (editingTaskId.value === null) return null
-  return taskStore.tasks.find(t => t.id === editingTaskId.value) ?? null
-})
-
+/**
+ * 过滤后的任务列表
+ * 根据状态、优先级和搜索关键词进行筛选
+ * 并按创建时间倒序排列（新任务在前）
+ */
 const filteredTasks = computed(() => {
-  const trimmedKeyword = debouncedKeyword.value
   return taskStore.tasks.filter(task => {
-    const matchStatus = statusFilter.value === 'all' || task.status === statusFilter.value
-    const matchPriority = priorityFilter.value === 'all' || task.priority === priorityFilter.value
-    const matchKeyword =
-      trimmedKeyword === '' ||
-      task.title.toLowerCase().includes(trimmedKeyword) ||
-      task.description.toLowerCase().includes(trimmedKeyword)
-    return matchStatus && matchPriority && matchKeyword
+    // 状态筛选
+    if (statusFilter.value !== 'all' && task.status !== statusFilter.value) {
+      return false
+    }
+    // 优先级筛选
+    if (priorityFilter.value !== 'all' && task.priority !== priorityFilter.value) {
+      return false
+    }
+    // 关键词搜索（匹配标题或描述）
+    if (debouncedKeyword.value) {
+      const titleMatch = task.title.toLowerCase().includes(debouncedKeyword.value)
+      const descMatch = task.description.toLowerCase().includes(debouncedKeyword.value)
+      if (!titleMatch && !descMatch) {
+        return false
+      }
+    }
+    return true
+  }).sort((a, b) => {
+    // 默认按更新时间倒序，或者创建时间倒序
+    const timeA = a.updatedAt || a.createdAt || 0
+    const timeB = b.updatedAt || b.createdAt || 0
+    return timeB - timeA
   })
 })
 
+// 统计各状态的任务数量
 const totalCount = computed(() => taskStore.tasks.length)
 const todoCount = computed(() => taskStore.tasks.filter(t => t.status === 'todo').length)
 const doingCount = computed(() => taskStore.tasks.filter(t => t.status === 'doing').length)
 const doneCount = computed(() => taskStore.tasks.filter(t => t.status === 'done').length)
 
-const toastMessage = ref('')
-const toastVisible = ref(false)
-let toastTimer: number | undefined
-
-const showToast = (message: string) => {
-  toastMessage.value = message
-  toastVisible.value = true
-  if (toastTimer !== undefined) {
-    clearTimeout(toastTimer)
+/**
+ * 当前正在编辑的任务对象
+ */
+const editingTask = computed(() => {
+  if (dialogMode.value === 'edit' && editingTaskId.value) {
+    return taskStore.tasks.find(t => t.id === editingTaskId.value)
   }
-  toastTimer = window.setTimeout(() => {
-    toastVisible.value = false
-  }, 2000)
-}
+  return null
+})
 
-const handleDeleteTask = (id: number) => {
-  const ok = window.confirm('确定要删除这个任务吗？')
-  if (!ok) return
-  taskStore.removeTask(id)
-  showToast('任务已删除')
-}
-
+// 打开创建对话框
 const openCreateDialog = () => {
   dialogMode.value = 'create'
   editingTaskId.value = null
   showDialog.value = true
 }
 
+// 打开编辑对话框
 const openEditDialog = (id: number) => {
   dialogMode.value = 'edit'
   editingTaskId.value = id
   showDialog.value = true
 }
 
+// 关闭对话框
+const handleCancelDialog = () => {
+  showDialog.value = false
+  editingTaskId.value = null
+}
+
+// 处理添加任务
 const handleAddTask = (data: { title: string; description: string; priority: TaskPriority }) => {
   taskStore.addTask(data.title, data.description, data.priority)
   showDialog.value = false
   showToast('任务创建成功')
 }
 
+// 处理更新任务
 const handleUpdateTask = (data: { title: string; description: string; priority: TaskPriority }) => {
-  if (editingTaskId.value === null) return
-  taskStore.updateTask(editingTaskId.value, data)
-  showDialog.value = false
-  dialogMode.value = 'create'
-  editingTaskId.value = null
-  showToast('任务已更新')
+  if (editingTaskId.value) {
+    taskStore.updateTask(editingTaskId.value, data)
+    showDialog.value = false
+    showToast('任务更新成功')
+  }
 }
 
-const handleCancelDialog = () => {
-  showDialog.value = false
-  dialogMode.value = 'create'
-  editingTaskId.value = null
+// 处理删除任务
+const handleDeleteTask = (id: number) => {
+  if (confirm('确定要删除这个任务吗？')) {
+    taskStore.removeTask(id)
+    showToast('任务已删除')
+  }
 }
 
+// 处理清除已完成任务
 const handleClearCompleted = () => {
-  if (doneCount.value === 0) return
-  const ok = window.confirm('确定要清除所有已完成任务吗？')
-  if (!ok) return
-  taskStore.clearCompletedTasks()
-  showToast('已清除所有已完成任务')
+  if (confirm('确定要清除所有已完成的任务吗？')) {
+    taskStore.clearCompletedTasks()
+    showToast('已清除所有已完成任务')
+  }
 }
 
-const getStatusClass = (status: TaskStatus): string => {
-  const statusMap: Record<TaskStatus, string> = {
-    'todo': 'bg-yellow-100 text-yellow-800',
-    'doing': 'bg-blue-100 text-blue-800',
-    'done': 'bg-green-100 text-green-800'
-  }
-  return statusMap[status]
+// Toast 提示状态
+const toastVisible = ref(false)
+const toastMessage = ref('')
+let toastTimer: number | undefined
+
+/**
+ * 显示 Toast 提示
+ * @param msg 提示消息
+ */
+const showToast = (msg: string) => {
+  toastMessage.value = msg
+  toastVisible.value = true
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => {
+    toastVisible.value = false
+  }, 3000)
 }
 
-const getStatusText = (status: TaskStatus): string => {
-  const statusMap: Record<TaskStatus, string> = {
-    'todo': '待办',
-    'doing': '进行中',
-    'done': '已完成'
+// 获取状态对应的样式类
+const getStatusClass = (status: TaskStatus) => {
+  switch (status) {
+    case 'todo': return 'bg-yellow-100 text-yellow-800'
+    case 'doing': return 'bg-blue-100 text-blue-800'
+    case 'done': return 'bg-green-100 text-green-800'
   }
-  return statusMap[status]
 }
 
-const getPriorityClass = (priority: TaskPriority): string => {
-  const priorityMap: Record<TaskPriority, string> = {
-    'high': 'bg-red-100 text-red-800',
-    'medium': 'bg-orange-100 text-orange-800',
-    'low': 'bg-gray-100 text-gray-800'
+// 获取卡片边框样式类
+const getCardStatusClass = (status: TaskStatus) => {
+   switch (status) {
+    case 'todo': return 'border-l-4 border-l-yellow-500'
+    case 'doing': return 'border-l-4 border-l-blue-500'
+    case 'done': return 'border-l-4 border-l-green-500 opacity-75'
   }
-  return priorityMap[priority]
 }
 
-const getPriorityText = (priority: TaskPriority): string => {
-  const priorityMap: Record<TaskPriority, string> = {
-    'high': '高',
-    'medium': '中',
-    'low': '低'
+// 获取状态显示文本
+const getStatusText = (status: TaskStatus) => {
+  switch (status) {
+    case 'todo': return '待办'
+    case 'doing': return '进行中'
+    case 'done': return '已完成'
   }
-  return priorityMap[priority]
 }
 
-const getCardStatusClass = (status: TaskStatus): string => {
-  const map: Record<TaskStatus, string> = {
-    todo: 'bg-white',
-    doing: 'bg-blue-50 border-blue-200',
-    done: 'bg-green-50 border-green-200'
+// 获取优先级对应的样式类
+const getPriorityClass = (priority: TaskPriority) => {
+  switch (priority) {
+    case 'high': return 'bg-red-100 text-red-800'
+    case 'medium': return 'bg-orange-100 text-orange-800'
+    case 'low': return 'bg-gray-100 text-gray-800'
   }
-  return map[status]
+}
+
+// 获取优先级显示文本
+const getPriorityText = (priority: TaskPriority) => {
+  switch (priority) {
+    case 'high': return '高'
+    case 'medium': return '中'
+    case 'low': return '低'
+  }
 }
 </script>
 

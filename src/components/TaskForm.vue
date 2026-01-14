@@ -78,13 +78,22 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * 任务表单组件
+ * 用于创建新任务或编辑现有任务
+ * 包含表单验证、数据绑定和事件发射
+ */
 import { ref, onMounted, watch } from 'vue'
 import type { TaskPriority } from '../types'
 
 interface Props {
+  /** 默认优先级，用于重置表单 */
   defaultPriority?: TaskPriority
+  /** 初始标题（编辑模式使用） */
   initialTitle?: string
+  /** 初始描述（编辑模式使用） */
   initialDescription?: string
+  /** 初始优先级（编辑模式使用） */
   initialPriority?: TaskPriority
 }
 
@@ -95,7 +104,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
+  /** 提交表单事件，携带表单数据 */
   submit: [data: { title: string; description: string; priority: TaskPriority }]
+  /** 取消操作事件 */
   cancel: []
 }>()
 
